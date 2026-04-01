@@ -1,0 +1,15 @@
+-r requirements.txt
+
+Pillow>=9.0
+medpy>=0.5
+scikit-learn>=1.2
+pydicom>=2.4
+tensorboard>=2.14
+
+# Optional experimentation stack
+tensorflow>=2.13; python_version < "3.13"
+keras>=2.13; python_version < "3.13"
+
+# Notebook workflow
+jupyter>=1.0
+ipykernel>=6.0

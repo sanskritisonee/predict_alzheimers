@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: predict-alzheimers-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/render_start.py
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: MODEL_PATH
+        value: /tmp/model.pth
+      - key: MODEL_URL
+        sync: false

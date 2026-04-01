@@ -5,7 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import torch
-from PIL import Image
 
 # Tell Matplotlib to not try and use interactive backend
 mpl.use("agg")

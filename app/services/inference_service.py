@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 import sys
 import tempfile
 from functools import lru_cache
@@ -27,7 +28,15 @@ if str(MODEL_DIR) not in sys.path:
 
 from inference.UNetInferenceAgent import UNetInferenceAgent
 
-DEFAULT_MODEL_PATH = REPO_ROOT / "out" / "final_model" / "model.pth"
+
+def _default_model_path() -> Path:
+    configured_path = os.environ.get("MODEL_PATH")
+    if configured_path:
+        return Path(configured_path).expanduser()
+    return REPO_ROOT / "out" / "final_model" / "model.pth"
+
+
+DEFAULT_MODEL_PATH = _default_model_path()
 DEFAULT_PATCH_SIZE = 64
 
 

@@ -50,10 +50,10 @@ python -m pip install --upgrade pip
 ### 2) Install dependencies
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 ```
 
-`requirements.txt` includes the medical-imaging stack plus FastAPI web-app dependencies such as FastAPI, Uvicorn, Python Multipart, Jinja2, NumPy, Matplotlib, NiBabel, SciPy, MedPy, scikit-learn, PyTorch, TensorBoard, TensorFlow, Keras, Pillow, and PyDicom.
+`requirements-dev.txt` includes the full local training and notebook stack. `requirements.txt` is the slimmer runtime dependency set used for hosted deployment.
 
 ### 3) Dataset download and local structure
 
@@ -157,6 +157,26 @@ Available routes:
 - `/api/predict`: API endpoint for file upload inference
 
 The web app expects a trained model at `out/final_model/model.pth`.
+
+### 7.1) Render deployment
+
+For Render, use the lighter runtime dependencies in `requirements.txt` and the startup helper in `scripts/render_start.py`.
+
+- Blueprint/config file: [render.yaml](./render.yaml)
+- Render deployment notes: [RENDER.md](./RENDER.md)
+
+Recommended environment variables on Render:
+
+- `MODEL_PATH=/tmp/model.pth`
+- `MODEL_URL=<direct download url for model.pth>`
+
+The Render startup command is:
+
+```bash
+python scripts/render_start.py
+```
+
+On Render's free tier, the service has an ephemeral filesystem and no persistent disk support, so the model may be downloaded again on cold starts or redeploys.
 
 ### 8) GPU setup
 
