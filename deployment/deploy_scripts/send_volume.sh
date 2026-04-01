@@ -1,7 +1,11 @@
 #!/bin/bash
 
-# This script sends a study to the Orthanc server
+set -euo pipefail
 
-# In the test data directory you will find three different studies - you may change the dir here
-# to try all three out
-storescu 127.0.0.1 4242 -v -aec HIPPOAI +r +sd /data/TestVolumes/Study1
+# This script sends a study to Orthanc/StoreSCP.
+HOST="${HOST:-127.0.0.1}"
+PORT="${PORT:-4242}"
+AET="${AET:-HIPPOAI}"
+TEST_STUDY_DIR="${TEST_STUDY_DIR:-/data/TestVolumes/Study1}"
+
+storescu "${HOST}" "${PORT}" -v -aec "${AET}" +r +sd "${TEST_STUDY_DIR}"

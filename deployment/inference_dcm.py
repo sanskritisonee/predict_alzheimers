@@ -11,11 +11,13 @@ This code will do the following:
 """
 
 import os
-import sys
 import datetime
 import time
 import shutil
 import subprocess
+import argparse
+import json
+from pathlib import Path
 
 import numpy as np
 import pydicom
@@ -25,6 +27,50 @@ from PIL import ImageFont
 from PIL import ImageDraw
 
 from inference.UNetInferenceAgent import UNetInferenceAgent
+
+
+def _load_report_font(size):
+    """Load a bundled font when available, otherwise fall back to PIL's default."""
+    font_path = Path(__file__).resolve().parent / "assets" / "Roboto-Regular.ttf"
+    if font_path.exists():
+        return ImageFont.truetype(str(font_path), size=size)
+
+    print(f"Warning: font asset not found at {font_path}. Falling back to default font.")
+    return ImageFont.load_default()
+
+
+def _header_value(header, field, default="N/A"):
+    """Read a DICOM field safely so report generation does not fail on missing metadata."""
+    value = getattr(header, field, default)
+    return str(value) if value not in (None, "") else default
+
+
+def _discover_study_dir(routing_dir):
+    """Accept either a routed-studies folder or a single study folder."""
+    subdirs = [x for x in routing_dir.iterdir() if x.is_dir()]
+    if subdirs:
+        return sorted(subdirs, key=lambda p: p.stat().st_mtime, reverse=True)[0]
+    return routing_dir
+
+
+def load_runtime_config(config_path):
+    """Load PACS/DICOM runtime settings from a JSON file."""
+    path = Path(config_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {path}")
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected a JSON object in config file: {path}")
+    return data
+
+
+def resolve_arg(args, config, key, default=None):
+    """Prefer CLI value, then config file value, then fallback default."""
+    value = getattr(args, key)
+    if value is not None:
+        return value
+    return config.get(key, default)
 
 def load_dicom_volume_as_numpy_from_list(dcmlist):
     """Loads a list of PyDicom objects a Numpy array.
@@ -89,8 +135,8 @@ def create_report(inference, header, orig_vol, pred_vol):
     pimg = Image.new("RGB", (1000, 1000))
     draw = ImageDraw.Draw(pimg)
 
-    header_font = ImageFont.truetype("assets/Roboto-Regular.ttf", size=40)
-    main_font = ImageFont.truetype("assets/Roboto-Regular.ttf", size=20)
+    header_font = _load_report_font(size=40)
+    main_font = _load_report_font(size=20)
 
     slice_nums = [orig_vol.shape[2]//3, orig_vol.shape[2]//2, orig_vol.shape[2]*3//4] # is there a better choice?
 
@@ -103,14 +149,14 @@ def create_report(inference, header, orig_vol, pred_vol):
     # clinicians.
     draw.text((350, 20), "HippoVolume.AI", (255, 255, 255), font=header_font)
     draw.multiline_text((10, 120),
-                         f"Patient ID: {header.PatientID}\n"
-                        f"Patient Name: {header.PatientName}\n"
-                        f"Study Date: {header.StudyDate}\n"
-                        f"Series Date: {header.SeriesDate}\n"
-                        f"Series Description: {header.SeriesDescription}\n"
-                        f"Study Description : {header.StudyDescription}\n"
-                        f"Modality: {header.Modality}\n"
-                        f"Image Type: {header.ImageType}\n"
+                         f"Patient ID: {_header_value(header, 'PatientID')}\n"
+                        f"Patient Name: {_header_value(header, 'PatientName')}\n"
+                        f"Study Date: {_header_value(header, 'StudyDate')}\n"
+                        f"Series Date: {_header_value(header, 'SeriesDate')}\n"
+                        f"Series Description: {_header_value(header, 'SeriesDescription')}\n"
+                        f"Study Description : {_header_value(header, 'StudyDescription')}\n"
+                        f"Modality: {_header_value(header, 'Modality')}\n"
+                        f"Image Type: {_header_value(header, 'ImageType')}\n"
                         f"Anterior volume: {anterior_vol}\n"
                         f"Posterior volume: {posterior_vol}\n"
                         f"Total volume: {total_vol} \n"
@@ -213,7 +259,7 @@ def save_report_as_dcm(header, report, path):
 
     pydicom.filewriter.dcmwrite(path, out, write_like_original=False)
 
-def get_series_for_inference(path):
+def get_series_for_inference(path, series_description="HippoCrop"):
     """Reads multiple series from one folder and picks the one
     to run inference on.
 
@@ -241,54 +287,126 @@ def get_series_for_inference(path):
 
     # Initialise array for series
     dicoms = []
-    for dir , subdirs, files in os.walk(path):
-        for subdir in subdirs:
-            dicoms.extend([pydicom.dcmread(os.path.join(path, subdir, f)) for f in os.listdir(os.path.join(path, subdir))])
-            series_for_inference = [dcm for dcm in dicoms if dcm.SeriesDescription == 'HippoCrop']
+    for root, _, files in os.walk(path):
+        for filename in files:
+            file_path = os.path.join(root, filename)
+            try:
+                dicoms.append(pydicom.dcmread(file_path))
+            except Exception:
+                # Ignore non-DICOM files in routed study folders.
+                continue
+
+    series_for_inference = [
+        dcm for dcm in dicoms
+        if getattr(dcm, "SeriesDescription", "") == series_description
+    ]
+
+    if len(series_for_inference) == 0:
+        raise ValueError(
+            f"Could not find any DICOM series with SeriesDescription='{series_description}' in {path}"
+        )
 
     # Check if there are more than one series (using set comprehension).
     if len({f.SeriesInstanceUID for f in series_for_inference}) != 1:
-        print("Error: can not figure out what series to run inference on")
-        print(series_for_inference)
-        return []
+        raise ValueError(
+            f"Found multiple candidate series with SeriesDescription='{series_description}'. "
+            "Please narrow the input study folder or change --series-description."
+        )
 
     return series_for_inference
 
-def os_command(command):
-    # Comment this if running under Windows
-    sp = subprocess.Popen(["/bin/bash", "-i", "-c", command])
-    sp.communicate()
+def send_report_to_pacs(report_path, host, port, ae_title, storescu_bin="storescu"):
+    """Send the generated report to a PACS/Orthanc endpoint using storescu."""
+    cmd = [
+        storescu_bin,
+        host,
+        str(port),
+        "-v",
+        "-aec",
+        ae_title,
+        "+r",
+        "+sd",
+        str(report_path),
+    ]
 
-    # Uncomment this if running under Windows
-    # os.system(command)
+    print("> " + " ".join(cmd))
+    try:
+        subprocess.run(cmd, check=True)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"'{storescu_bin}' was not found on PATH. Install DCMTK or pass --skip-send."
+        ) from exc
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run DICOM inference and build report")
+    parser.add_argument("routing_dir", nargs="?", type=str,
+                        help="Directory that contains routed studies")
+    parser.add_argument("--config", type=str, default=None,
+                        help="Optional JSON config file for PACS/DICOM deployment settings")
+    parser.add_argument("--model-path", type=str, default=None,
+                        help="Path to trained model.pth (default: model/out/final_model/model.pth)")
+    parser.add_argument("--report-path", type=str, default=None,
+                        help="Path where report DICOM will be saved")
+    parser.add_argument("--series-description", type=str, default=None,
+                        help="SeriesDescription value used to select the MRI series for inference")
+    parser.add_argument("--skip-send", action="store_true",
+                        help="Create the report DICOM but do not send it to Orthanc via storescu")
+    parser.add_argument("--send-host", type=str, default=None,
+                        help="PACS/Orthanc hostname for storescu")
+    parser.add_argument("--send-port", type=int, default=None,
+                        help="PACS/Orthanc port for storescu")
+    parser.add_argument("--send-aet", type=str, default=None,
+                        help="Called AE title for storescu")
+    parser.add_argument("--storescu-bin", type=str, default=None,
+                        help="Path or command name for the storescu executable")
+    parser.add_argument("--cleanup-study", action="store_true",
+                        help="Delete the processed study folder after a successful run")
+    return parser.parse_args()
 
 if __name__ == "__main__":
-    # Copy data to local dir
-    #os_command("sudo cp -r /data/TestVolumes/* /home/workspace/src/TestVolumes/")
-    # This code expects a single command line argument with link to the directory containing
-    # routed studies
-    if len(sys.argv) != 2:
-        print("You should supply one command line argument pointing to the routing folder. Exiting.")
-        sys.exit()
+    args = parse_args()
+    config = load_runtime_config(args.config) if args.config else {}
 
-    # Find all subdirectories within the supplied directory. We assume that
-    # one subdirectory contains a full study
-    subdirs = [os.path.join(sys.argv[1], d) for d in os.listdir(sys.argv[1]) if
-                os.path.isdir(os.path.join(sys.argv[1], d))]
+    repo_root = Path(__file__).resolve().parents[1]
+    routing_dir_value = resolve_arg(args, config, "routing_dir")
+    if routing_dir_value is None:
+        raise ValueError("routing_dir is required. Pass it on the command line or via --config.")
+    routing_dir = Path(routing_dir_value)
+    default_model = repo_root / "out" / "final_model" / "model.pth"
+    default_report = repo_root / "out" / "reports" / "report.dcm"
+    model_path_value = resolve_arg(args, config, "model_path", str(default_model))
+    report_path_value = resolve_arg(args, config, "report_path", str(default_report))
+    series_description = resolve_arg(args, config, "series_description", "HippoCrop")
+    send_host = resolve_arg(args, config, "send_host", "127.0.0.1")
+    send_port = int(resolve_arg(args, config, "send_port", 4242))
+    send_aet = resolve_arg(args, config, "send_aet", "HIPPOAI")
+    storescu_bin = resolve_arg(args, config, "storescu_bin", "storescu")
+    cleanup_study = bool(config.get("cleanup_study", False)) or args.cleanup_study
+    skip_send = bool(config.get("skip_send", False)) or args.skip_send
 
-    # Get the latest directory
-    study_dir = sorted(subdirs, key=lambda dir: os.stat(dir).st_mtime, reverse=True)[0]
+    model_path = Path(model_path_value)
+    report_save_path = Path(report_path_value)
+    report_save_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not routing_dir.exists():
+        raise FileNotFoundError(f"Routing directory not found: {routing_dir}")
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model file not found: {model_path}")
+
+    study_dir = _discover_study_dir(routing_dir)
 
     print(f"Looking for series to run inference on in directory {study_dir}...")
 
-    volume, header = load_dicom_volume_as_numpy_from_list(get_series_for_inference(study_dir))
+    series = get_series_for_inference(study_dir, series_description=series_description)
+    volume, header = load_dicom_volume_as_numpy_from_list(series)
     print(f"Found series of {volume.shape[2]} axial slices")
 
     print("HippoVolume.AI: Running inference...")
     # Use the UNetInferenceAgent class and model parameter file from the previous section
     inference_agent = UNetInferenceAgent(
         device="cpu",
-        parameter_file_path=r"/home/workspace/section2/out/final_model/model.pth")
+        parameter_file_path=str(model_path))
 
     # Run inference
     # single_volume_inference_unpadded takes a volume of arbitrary size
@@ -299,21 +417,28 @@ if __name__ == "__main__":
 
     # Create and save the report
     print("Creating and pushing report...")
-    report_save_path = r"/home/workspace/reports/report.dcm"
     report_img = create_report(pred_volumes, header, volume, pred_label)
-    save_report_as_dcm(header, report_img, report_save_path)
+    save_report_as_dcm(header, report_img, str(report_save_path))
 
     # Send report to our storage archive
     # Write a command line string that will issue a DICOM C-STORE request to send our report
     # to our Orthanc server (that runs on port 4242 of the local machine), using storescu tool
-    os_command("storescu 127.0.0.1 4242 -v -aec HIPPOAI +r +sd /home/workspace/reports/report.dcm")
+    if skip_send:
+        print(f"Report saved locally at {report_save_path}. Skipping storescu send.")
+    else:
+        send_report_to_pacs(
+            report_path=report_save_path,
+            host=send_host,
+            port=send_port,
+            ae_title=send_aet,
+            storescu_bin=storescu_bin,
+        )
 
-    # This line will remove the study dir if run as root user
-    # Sleep to let our StoreSCP server process the report (remember - in our setup
-    # the main archive is routing everyting that is sent to it, including our freshly generated
-    # report) - we want to give it time to save before cleaning it up
-    time.sleep(2)
-    shutil.rmtree(study_dir, onerror=lambda f, p, e: print(f"Error deleting: {e[1]}"))
+    if cleanup_study:
+        # Sleep to let downstream systems finish reading before cleanup.
+        time.sleep(2)
+        shutil.rmtree(study_dir, onerror=lambda f, p, e: print(f"Error deleting: {e[1]}"))
+        print(f"Removed processed study directory: {study_dir}")
 
     print(f"Inference successful on {header['SOPInstanceUID'].value}, out: {pred_label.shape}",
           f"volume ant: {pred_volumes['anterior']}, ",

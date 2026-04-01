@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HippoVolume AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='/favicon.svg') }}">
+</head>
+<body>
+    <main class="page-shell">
+        <div class="ambient ambient-a"></div>
+        <div class="ambient ambient-b"></div>
+
+        <header class="topbar">
+            <div class="brand-lockup">
+                <img src="{{ url_for('static', path='/favicon.svg') }}" alt="" class="brand-mark">
+                <div>
+                    <p class="eyebrow">HippoVolume AI</p>
+                    <h2>Brain MRI segmentation</h2>
+                </div>
+            </div>
+            <nav class="top-links" aria-label="Quick links">
+                <a href="/docs">API Docs</a>
+                <a href="/health">Health</a>
+            </nav>
+        </header>
+
+        <section class="hero">
+            <div class="hero-copy">
+                <p class="eyebrow">MRI Upload</p>
+                <h1>Upload a brain MRI and review the result.</h1>
+                <p class="lead">
+                    This app runs the trained model on a 3D `.nii` or `.nii.gz` MRI volume and returns
+                    a hippocampus segmentation preview with volume measurements.
+                </p>
+                <div class="hero-band">
+                    <div>
+                        <span class="stat-label">Model scope</span>
+                        <strong>Segmentation + volume estimation</strong>
+                    </div>
+                    <p>
+                        The current model does not provide a clinically valid Alzheimer's yes/no diagnosis.
+                    </p>
+                </div>
+            </div>
+
+            <aside class="hero-card">
+                <div class="panel-top">
+                    <div>
+                        <p class="eyebrow">Run Prediction</p>
+                        <h3>Upload MRI scan</h3>
+                    </div>
+                    <span class="status-chip {{ 'ready' if model_ready else 'missing' }}">
+                        {{ 'Ready' if model_ready else 'Missing' }}
+                    </span>
+                </div>
+                <form action="/predict" method="post" enctype="multipart/form-data" class="upload-form">
+                    <label class="field">
+                        <span>MRI volume</span>
+                        <div class="file-shell">
+                            <input id="mri-file" type="file" name="file" accept=".nii,.nii.gz" required>
+                            <span id="file-name" class="file-name">Select a `.nii` or `.nii.gz` file</span>
+                        </div>
+                    </label>
+
+                    <label class="field">
+                        <span>Optional slice index</span>
+                        <input type="number" name="slice_index" min="0" placeholder="Default: middle slice">
+                    </label>
+
+                    <div class="support-grid">
+                        <div>
+                            <span class="stat-label">Accepted</span>
+                            <strong>.nii / .nii.gz</strong>
+                        </div>
+                        <div>
+                            <span class="stat-label">Preview</span>
+                            <strong>Middle slice by default</strong>
+                        </div>
+                    </div>
+
+                    <button id="submit-button" type="submit">Generate Prediction</button>
+                </form>
+            </aside>
+        </section>
+
+        {% if error %}
+        <section class="message error">
+            <strong>Prediction failed.</strong>
+            <p>{{ error }}</p>
+        </section>
+        {% endif %}
+
+        {% if result %}
+        <section class="results-shell">
+            <article class="result-card report-card">
+                <div class="card-heading">
+                    <p class="eyebrow">Result</p>
+                    <h2>{{ result.filename }}</h2>
+                </div>
+
+                <div class="scoreboard">
+                    <div class="score-block">
+                        <span class="stat-label">Total volume</span>
+                        <strong>{{ result.volumes.total }}</strong>
+                    </div>
+                    <div class="score-block">
+                        <span class="stat-label">Slice index</span>
+                        <strong>{{ result.slice_index }}</strong>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div>
+                        <span class="stat-label">Shape</span>
+                        <strong>{{ result.shape }}</strong>
+                    </div>
+                    <div>
+                        <span class="stat-label">Labels</span>
+                        <strong>{{ result.labels }}</strong>
+                    </div>
+                    <div>
+                        <span class="stat-label">Diagnosis output</span>
+                        <strong>{{ result.alzheimers_assessment.verdict }}</strong>
+                    </div>
+                </div>
+
+                <div class="volume-strip">
+                    <div>
+                        <span class="stat-label">Anterior</span>
+                        <strong>{{ result.volumes.anterior }}</strong>
+                    </div>
+                    <div>
+                        <span class="stat-label">Posterior</span>
+                        <strong>{{ result.volumes.posterior }}</strong>
+                    </div>
+                    <div>
+                        <span class="stat-label">Total</span>
+                        <strong>{{ result.volumes.total }}</strong>
+                    </div>
+                </div>
+
+                <p class="prototype-note">{{ result.alzheimers_assessment.detail }}</p>
+            </article>
+
+            <article class="result-card preview-card">
+                <div class="card-heading">
+                    <p class="eyebrow">Preview</p>
+                    <h2>Segmentation overlay</h2>
+                </div>
+                <div class="preview-frame">
+                    <img
+                        class="preview-image"
+                        src="data:image/png;base64,{{ result.preview_png_base64 }}"
+                        alt="Predicted hippocampus segmentation preview"
+                    >
+                </div>
+            </article>
+        </section>
+        {% else %}
+        <section class="results-shell">
+            <article class="result-card empty-card">
+                <div class="card-heading">
+                    <p class="eyebrow">Output</p>
+                    <h2>Your result will appear here after upload.</h2>
+                </div>
+                <p class="prototype-note">
+                    The app will show the predicted mask preview, hippocampal volume counts, and a
+                    non-diagnostic Alzheimer’s status field based on the current model scope.
+                </p>
+            </article>
+
+            <article class="result-card preview-card empty-preview">
+                <div class="preview-placeholder">
+                    <div class="preview-orbit orbit-a"></div>
+                    <div class="preview-orbit orbit-b"></div>
+                    <div class="preview-core"></div>
+                    <div class="scan-line scan-line-a"></div>
+                    <div class="scan-line scan-line-b"></div>
+                    <div class="preview-caption">
+                        <span class="stat-label">Awaiting Upload</span>
+                        <strong>Prediction preview will appear here.</strong>
+                    </div>
+                </div>
+            </article>
+        </section>
+        {% endif %}
+
+        <section class="footer-note">
+            <p>
+                Available routes: <code>/</code>, <code>/health</code>, <code>/docs</code>, and
+                <code>/api/predict</code>.
+            </p>
+        </section>
+    </main>
+
+    <script>
+        const fileInput = document.getElementById("mri-file");
+        const fileName = document.getElementById("file-name");
+        const submitButton = document.getElementById("submit-button");
+
+        if (fileInput && fileName) {
+            fileInput.addEventListener("change", () => {
+                const selected = fileInput.files && fileInput.files[0]
+                    ? fileInput.files[0].name
+                    : "Select a `.nii` or `.nii.gz` file";
+                fileName.textContent = selected;
+            });
+        }
+
+        if (submitButton) {
+            submitButton.form?.addEventListener("submit", () => {
+                submitButton.textContent = "Running prediction...";
+                submitButton.disabled = true;
+            });
+        }
+    </script>
+</body>
+</html>

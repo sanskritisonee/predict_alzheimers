@@ -1,3 +1,10 @@
 #!/bin/bash
 
-storescu 127.0.0.1 4242 -v -aec HIPPOAI /datadrive/out/report.dcm
+set -euo pipefail
+
+HOST="${HOST:-127.0.0.1}"
+PORT="${PORT:-4242}"
+AET="${AET:-HIPPOAI}"
+REPORT_DCM_PATH="${REPORT_DCM_PATH:-/datadrive/out/report.dcm}"
+
+storescu "${HOST}" "${PORT}" -v -aec "${AET}" "${REPORT_DCM_PATH}"

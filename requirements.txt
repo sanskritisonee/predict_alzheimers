@@ -1,0 +1,24 @@
+numpy>=1.23
+matplotlib>=3.6
+Pillow>=9.0
+nibabel>=5.0
+scipy>=1.10
+medpy>=0.5
+scikit-learn>=1.2
+pydicom>=2.4
+fastapi>=0.111
+uvicorn>=0.30
+python-multipart>=0.0.9
+Jinja2>=3.1
+
+# Core training stack (project uses PyTorch)
+torch>=2.1
+tensorboard>=2.14
+
+# Requested for optional experimentation (TensorFlow does not publish wheels for Python 3.13+)
+tensorflow>=2.13; python_version < "3.13"
+keras>=2.13; python_version < "3.13"
+
+# VS Code/Jupyter workflow
+jupyter>=1.0
+ipykernel>=6.0

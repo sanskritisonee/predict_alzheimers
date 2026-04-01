@@ -46,9 +46,9 @@ class SlicesDataset(Dataset):
         # Get image and label data
         image_data = self.data[slc[0]]['image'][slc[1]]
         label_data = self.data[slc[0]]["seg"][slc[1]]
-        # Convert into pytorch tensors with appropriate dimensions, and assign keys and values to sample
-        sample['image'] = torch.from_numpy(image_data).unsqueeze(0).cuda()
-        sample['seg'] = torch.from_numpy(label_data[None, :]).long().cuda()
+        # Keep tensors on CPU here; training loop moves them to the selected device.
+        sample['image'] = torch.from_numpy(image_data).unsqueeze(0)
+        sample['seg'] = torch.from_numpy(label_data[None, :]).long()
 
         return sample
 

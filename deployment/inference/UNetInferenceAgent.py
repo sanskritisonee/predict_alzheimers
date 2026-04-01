@@ -6,7 +6,12 @@ import numpy as np
 
 from networks.RecursiveUNet import UNet
 
-from utils.utils import med_reshape
+
+def med_reshape(image, new_shape):
+    """Pad a 3D volume to target shape, preserving content in the top-left corner."""
+    reshaped_image = np.zeros(new_shape)
+    reshaped_image[0:image.shape[0], 0:image.shape[1], 0:image.shape[2]] = image
+    return reshaped_image
 
 
 class UNetInferenceAgent:
@@ -41,10 +46,11 @@ class UNetInferenceAgent:
 
         # Set model to eval no gradients
         self.model.eval()
+        original_shape = volume.shape
         # Reshape volume to conform to required model patch size
         volume = med_reshape(volume, new_shape=(volume.shape[0], self.patch_size, self.patch_size))
-        # Initialise slices with zeros
-        slices = np.zeros(volume.shape)
+        # Initialise slices with the original volume size so we can crop padded predictions back down.
+        slices = np.zeros(original_shape)
         # For each x slice in the volume
         for x_index in range(volume.shape[0]):
             # Get the x slice
@@ -55,8 +61,8 @@ class UNetInferenceAgent:
             predictions = self.model(tensor_x_slice)
             # Resize predictions
             pred_resized = np.squeeze(predictions.cpu().detach())
-            # Append predictions
-            slices[x_index,:,:] = torch.argmax(pred_resized, dim=0)
+            # Crop the padded prediction back to the original slice size.
+            slices[x_index,:,:] = torch.argmax(pred_resized, dim=0)[:original_shape[1], :original_shape[2]]
 
         # Return volume of predictions
         return slices

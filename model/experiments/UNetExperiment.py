@@ -299,9 +299,7 @@ class UNetExperiment:
             self.train()
             self.validate()
             self.save_predictions()
-
-        # save model for inferencing
-        self.save_model_parameters()
+            self.save_model_parameters()
 
         self._time_end = time.time()
         print(f"Run complete. Total time: {time.strftime('%H:%M:%S', time.gmtime(self._time_end - self._time_start))}")

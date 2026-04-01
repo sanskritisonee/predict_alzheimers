@@ -1,29 +1,14 @@
-# Predicting Alzheimer's disease using 3D MRI medical images
+# Predicting Hippocampal Volume from 3D Brain MRI
 
-## Introduction 
-In this project I develop a deep learning model to predict Alzheimer's disease using 3D MRI medical images. Alzheimer's disease (AD) is a progressive neurodegenerative disorder that results in impaired neuronal (brain cell) function and eventually, cell death. For patients exhibiting early symptoms, quantifying disease progression over time can help direct therapy and disease management. 
+## Introduction
 
-#### Location of the Hippocampus within the brain
-![title](img/hippo_location.png)
+This project develops a deep learning pipeline for hippocampus segmentation and volume estimation from 3D brain MRI scans. Because hippocampal atrophy is strongly associated with Alzheimer's disease progression, automated hippocampal measurement can support clinicians in diagnosis and longitudinal monitoring.
 
-A radiological study via MRI exam is currently one of the most advanced methods to quantify the disease. In particular, the measurement of hippocampal volume has proven useful to diagnose and track progression in several brain disorders, most notably in AD. Studies have shown a reduced volume of the hippocampus in patients with AD.
+The system uses the Hippocampus dataset from the [Medical Decathlon competition](http://medicaldecathlon.com), where each MRI volume is paired with a segmentation mask. A U-Net-based deep learning model is trained to segment hippocampal structures from MRI images and estimate anterior, posterior, and total hippocampal volumes.
 
-But with fewer and fewer trained Radiologists available, and increasing demands for medical imaging services - this presents a huge challenge for medical services.
+The project also includes an end-to-end inference and deployment workflow. After training, the model can process new MRI studies, generate hippocampal predictions, and serve results through a FastAPI backend and browser-based upload UI.
 
-#### Size and shape of the Hippocampus
-![title](img/hippo_shape.png)
-
-In this project I will build an end-to-end deep learning/AI system which features a machine learning algorithm that integrates into a clinical-grade viewer and automatically measures hippocampal volumes of new patients from their MRI images, as their studies are committed to the clinical imaging archive.
-
-#### Axial slice of an MRI image of the brain
-![title](img/brain_mri.png)
-
-I will use the dataset that contains the segmentations of the right hippocampus and will use the U-Net deep learning architecture to build a segmentation model.
-
-#### Cropped Hippocampus area from MRI image & predicted Hippocampus anterior (front) volume 
-![title](img/hippo_mri_ant.png)
-
-After the model is built, I will proceed to integrate the model into a working clinical PACS such that it runs on every incoming study and produces a report with volume measurements.
+This system is intended as a clinical decision-support prototype rather than a standalone Alzheimer's diagnostic tool. Its primary purpose is to assist radiologists and clinicians by automating hippocampal segmentation and volume quantification from MRI scans.
 
 ## The Dataset
 
@@ -35,11 +20,172 @@ I will be using the "Hippocampus" dataset from the [Medical Decathlon competitio
 
 - [Exploratory Data Analysis of Hippocampus 3D brain MRI images](https://github.com/pranath/predict_alzheimers/blob/master/eda.ipynb)
 - [Building & Training Model for Hippocampus volume prediction](https://github.com/pranath/predict_alzheimers/blob/master/model/experiments/UNetExperiment.py)
-- [Using model for inference](https://github.com/pranath/predict_alzheimers/blob/master/deployment/inference/UNetInferenceAgent.py)
+- [Using model for inference](https://github.com/pranath/predict_alzheimers/blob/master/model/inference/predict_nii_sample.py)
+- `app/main.py`: FastAPI backend and upload UI
 
 ## Results
 
-The final model achieved a mean dice score of 1.47 and a mean jaccard score of 0.81 in terms of accuracy for correctly classifying the anterior and posterior volumes of the Hippocampus. The model was then integrated into a clinical viewer to generate automated reports and predictions for Hippocampus volumes submitted via brain MRI scans in a PACS environment. This model can then be used by a clinician to assist with diagnosis & prognosis.
+The trained model produces hippocampal segmentation masks and derived anterior, posterior, and total hippocampal volume measurements from MRI studies. The project also includes a FastAPI backend and browser UI for uploading `.nii` or `.nii.gz` brain MRI volumes and reviewing prediction overlays and volume measurements in a simple web workflow.
 
-#### Showing model deployment in automated report with predictions integrated into medical viewer
-![title](img/report-ohif-viewer.png)
+## Run End-to-End (Windows/Linux)
+
+### 1) Create and activate virtual environment (Python 3.8+)
+
+Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+```
+
+Linux/macOS (bash):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+```
+
+### 2) Install dependencies
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+`requirements.txt` includes the medical-imaging stack plus FastAPI web-app dependencies such as FastAPI, Uvicorn, Python Multipart, Jinja2, NumPy, Matplotlib, NiBabel, SciPy, MedPy, scikit-learn, PyTorch, TensorBoard, TensorFlow, Keras, Pillow, and PyDicom.
+
+### 3) Dataset download and local structure
+
+Download Medical Decathlon Task04 Hippocampus:
+
+- Main site: http://medicaldecathlon.com/
+- Mirror page: https://github.com/MIC-DKFZ/MedicalDecathlon
+
+After extraction, place files in this structure:
+
+```text
+predict_alzheimers/
+	data/
+		TrainingSet/
+			images/
+				hippocampus_001.nii.gz
+				...
+			labels/
+				hippocampus_001.nii.gz
+				...
+```
+
+### 4) Folder structure and execution order
+
+- `eda.ipynb`: EDA and preprocessing preparation (outlier review and clean dataset copy).
+- `app/main.py`: FastAPI backend and browser UI.
+- `app/services/inference_service.py`: shared prediction service used by the API and UI.
+- `model/run_ml_pipeline.py`: training + validation + test metrics.
+- `model/inference/predict_nii_sample.py`: single-sample `.nii` prediction and slice visualization.
+- `run_end_to_end.py`: one-command preprocessing + training + optional sample inference.
+
+Recommended order:
+
+1. Run `eda.ipynb` (optional but recommended to inspect and understand data).
+2. Preprocess/clean dataset (either from notebook or with `run_end_to_end.py`, which does it automatically).
+3. Train with `model/run_ml_pipeline.py` (or via `run_end_to_end.py`).
+4. Run inference on one sample with `model/inference/predict_nii_sample.py`.
+
+### 5) Run commands
+
+Train directly:
+
+```bash
+python model/run_ml_pipeline.py --data-dir data/TrainingSet --output-dir out/predictions --epochs 8
+```
+
+Test one sample prediction (`.nii`):
+
+```bash
+python model/inference/predict_nii_sample.py \
+	--image data/TrainingSet/images/hippocampus_001.nii.gz \
+	--label data/TrainingSet/labels/hippocampus_001.nii.gz \
+	--model out/predictions/<timestamp>_Basic_unet/model.pth
+```
+
+### 6) Single command workflow
+
+Use this from repo root:
+
+```bash
+python run_end_to_end.py --data-dir data/TrainingSet --sample-image data/TrainingSet/images/hippocampus_001.nii.gz --sample-label data/TrainingSet/labels/hippocampus_001.nii.gz
+```
+
+This command:
+
+1. Creates a cleaned dataset copy in `out/TrainingSet` by copying data and excluding known outliers.
+2. Trains/evaluates the model.
+3. Runs sample prediction and saves visualization to `out/sample_prediction.png`.
+
+### 7) Web App Deployment
+
+Prepare the final model package:
+
+```bash
+python scripts/prepare_final_deployment.py
+```
+
+Run single-volume NIfTI inference:
+
+```bash
+python model/inference/predict_nii_sample.py --image data/TrainingSet/images/hippocampus_001.nii.gz --label data/TrainingSet/labels/hippocampus_001.nii.gz --model out/final_model/model.pth --save-figure out/final_prediction.png
+```
+
+Start the FastAPI backend and UI:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Then open:
+
+```bash
+http://127.0.0.1:8000
+```
+
+Available routes:
+
+- `/`: upload UI
+- `/health`: backend health check
+- `/docs`: FastAPI Swagger UI
+- `/api/predict`: API endpoint for file upload inference
+
+The web app expects a trained model at `out/final_model/model.pth`.
+
+### 8) GPU setup
+
+This repo's training code uses PyTorch; it automatically uses CUDA if available.
+
+- Verify PyTorch CUDA in Python:
+
+```python
+import torch
+print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
+```
+
+TensorFlow GPU check/config (optional, as requested):
+
+```bash
+python scripts/check_tf_gpu.py
+```
+
+### 9) VS Code + Jupyter smooth run
+
+1. Install VS Code extensions: Python and Jupyter.
+2. Select interpreter: Command Palette -> `Python: Select Interpreter` -> choose `.venv`.
+3. Open `eda.ipynb` and select the same kernel (`.venv`).
+4. Run notebook cells top-to-bottom.
+5. Run training/inference from VS Code terminal using the commands above.
+
+### 10) Common errors and fixes
+
+- `FileNotFoundError` for `images/` or `labels/`: verify dataset folder is `data/TrainingSet/images` and `data/TrainingSet/labels`, or pass `--data-dir`.
+- `No module named ...`: activate `.venv` and reinstall requirements.
+- CUDA/GPU not found: install compatible CUDA drivers/toolkit, or run on CPU.
+- TensorFlow GPU not found: verify CUDA/cuDNN compatibility for installed TensorFlow version.

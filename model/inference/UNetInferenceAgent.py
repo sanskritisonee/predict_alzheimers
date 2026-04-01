@@ -40,8 +40,9 @@ class UNetInferenceAgent:
 
         # Set model to eval no gradients
         self.model.eval()
-        # Initialise slices with zeros
-        slices = np.zeros(volume.shape)
+        original_shape = volume.shape
+        # Initialise slices with the original volume size so we can crop padded predictions back down.
+        slices = np.zeros(original_shape)
         # Reshape volume to conform to required model patch size
         volume = med_reshape(volume, new_shape=(volume.shape[0], self.patch_size, self.patch_size))
 
@@ -55,8 +56,8 @@ class UNetInferenceAgent:
             predictions = self.model(tensor_x_slice)
             # Resize predictions
             pred_resized = np.squeeze(predictions.cpu().detach())
-            # Append predictions
-            slices[x_index,:,:] = torch.argmax(pred_resized, dim=0)
+            # Crop the padded prediction back to the original slice size.
+            slices[x_index,:,:] = torch.argmax(pred_resized, dim=0)[:original_shape[1], :original_shape[2]]
 
         # Return volume of predictions
         return slices
