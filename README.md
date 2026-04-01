@@ -50,10 +50,10 @@ python -m pip install --upgrade pip
 ### 2) Install dependencies
 
 ```bash
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements.txt
 ```
 
-`requirements-dev.txt` includes the full local training and notebook stack. `requirements.txt` is the slimmer runtime dependency set used for hosted deployment.
+`requirements.txt` includes the dependencies needed for the local FastAPI app and MRI inference workflow.
 
 ### 3) Dataset download and local structure
 
@@ -123,13 +123,7 @@ This command:
 2. Trains/evaluates the model.
 3. Runs sample prediction and saves visualization to `out/sample_prediction.png`.
 
-### 7) Web App Deployment
-
-Prepare the final model package:
-
-```bash
-python scripts/prepare_final_deployment.py
-```
+### 7) Local Web App
 
 Run single-volume NIfTI inference:
 
@@ -158,26 +152,6 @@ Available routes:
 
 The web app expects a trained model at `out/final_model/model.pth`.
 
-### 7.1) Render deployment
-
-For Render, use the lighter runtime dependencies in `requirements.txt` and the startup helper in `scripts/render_start.py`.
-
-- Blueprint/config file: [render.yaml](./render.yaml)
-- Render deployment notes: [RENDER.md](./RENDER.md)
-
-Recommended environment variables on Render:
-
-- `MODEL_PATH=/tmp/model.pth`
-- `MODEL_URL=<direct download url for model.pth>`
-
-The Render startup command is:
-
-```bash
-python scripts/render_start.py
-```
-
-On Render's free tier, the service has an ephemeral filesystem and no persistent disk support, so the model may be downloaded again on cold starts or redeploys.
-
 ### 8) GPU setup
 
 This repo's training code uses PyTorch; it automatically uses CUDA if available.
@@ -187,12 +161,6 @@ This repo's training code uses PyTorch; it automatically uses CUDA if available.
 ```python
 import torch
 print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
-```
-
-TensorFlow GPU check/config (optional, as requested):
-
-```bash
-python scripts/check_tf_gpu.py
 ```
 
 ### 9) VS Code + Jupyter smooth run
